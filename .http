@@ -1,0 +1,6 @@
+curl -X POST localhost:3000/clientes/1/transacoes \
+-H "Content-Type: application/json" \
+-d '{
+  "valor": 10000,
+  "descricao": "Compra de celular"
+}'
