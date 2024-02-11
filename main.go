@@ -40,15 +40,15 @@ func initDB() {
 }
 
 type Conta struct {
-	Saldo  int64 `json:"total" db:"saldo"`
+	Saldo  int64 `json:"total"`
 	Limite int64 `json:"limite"`
 }
 
 type Extrato struct {
-	Valor       int64  `json:"valor" db:"valor"`
-	Tipo        string `json:"tipo" db:"tipo"`
-	Descricao   string `json:"descricao" db:"descricao"`
-	RealizadaEm string `json:"realizada_em" db:"realizada_em"`
+	Valor       int64  `json:"valor"`
+	Tipo        string `json:"tipo"`
+	Descricao   string `json:"descricao"`
+	RealizadaEm string `json:"realizada_em"`
 }
 
 func (e Extrato) GetDescricao() string {
