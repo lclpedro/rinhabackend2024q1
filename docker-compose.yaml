@@ -14,17 +14,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.17"
-          memory: "10MB"
+          cpus: "0.3"
+          memory: "30MB"
 
   api02:
-    <<: *api 
-    environment:
-      - DB_HOSTNAME=db
+    <<: *api
     ports:
       - "8082:3000"
-    networks:
-      - fsociety
 
   nginx:
       image: nginx:latest
@@ -40,27 +36,28 @@ services:
       deploy:
         resources:
           limits:
-            cpus: "0.17"
-            memory: "10MB"
+            cpus: "0.3"
+            memory: "20MB"
 
   db:
-    image: postgres:12
+    image: mysql:latest
     volumes:
       - ./data/data.sql:/docker-entrypoint-initdb.d/scripts.sql
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=bancocentral
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=bancocentral
     ports:
-      - 5432:5432
+      - 3306:3306
     restart: always
     networks:
       - fsociety
     deploy:
       resources:
         limits:
-          cpus: "0.13"
-          memory: "140MB"
+          cpus: "0.9"
+          memory: "500MB"
 
 networks:
   fsociety:

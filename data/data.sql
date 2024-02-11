@@ -1,5 +1,5 @@
 CREATE TABLE transacao (
-  id serial PRIMARY KEY,
+  id integer PRIMARY KEY,
   valor integer,
   tipo char(1),
   descricao varchar(10),
@@ -9,7 +9,7 @@ CREATE TABLE transacao (
 CREATE INDEX idx_transacao_id ON transacao (id, tipo);
 
 CREATE TABLE conta (
-  id serial PRIMARY KEY,
+  id integer PRIMARY KEY,
   saldo integer,
   limite integer
 );

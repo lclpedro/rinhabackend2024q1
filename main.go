@@ -10,10 +10,10 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
-	_ "github.com/lib/pq"
+	"github.com/jmoiron/sqlx"
 )
 
-var DB *sql.DB
+var DB *sqlx.DB
 
 func main() {
 	initDB()
@@ -26,16 +26,19 @@ func main() {
 
 func initDB() {
 	host := os.Getenv("DB_HOSTNAME")
-	db, err := sql.Open(
-		"postgres",
-		fmt.Sprintf(
-			"host=%s port=5432 user=postgres password=postgres dbname=bancocentral sslmode=disable",
-			host,
-		),
+	connectionString := fmt.Sprintf(
+		"hostname=%s port=%d username=%s password=%s dbname=%s?charset=utf8&parseTime=true",
+		host, 3306, "user", "password", "bancocentral",
 	)
+	db, err := sqlx.Open("mysql", connectionString)
 	if err != nil {
 		panic(err)
 	}
+
+	db.SetMaxOpenConns(1_000)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(30)
+	db.Exec("select 1;")
 	DB = db
 }
 
@@ -76,17 +79,13 @@ const (
 
 func InserirTransacao(c *fiber.Ctx) error {
 	ctx := context.Background()
-	conn, err := DB.Conn(ctx)
-	if err != nil {
-		return c.Status(500).SendString(err.Error())
-	}
 	id := c.Params("id")
 	bodyRequest := c.Body()
 	transacao := Extrato{}
 	sonic.Unmarshal(bodyRequest, &transacao)
 
 	conta := Conta{}
-	tx, err := conn.BeginTx(ctx, nil)
+	tx, err := DB.BeginTx(ctx, nil)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
@@ -116,14 +115,14 @@ func InserirTransacao(c *fiber.Ctx) error {
 	}
 
 	// TODO: testar benchmark com e sem goroutine
-	go func() {
-		_, err = conn.ExecContext(
-			ctx, queryInserirTransacao, id, transacao.Valor, transacao.Tipo, transacao.GetDescricao(),
-		)
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-	}()
+	// go func() {
+	_, err = DB.ExecContext(
+		ctx, queryInserirTransacao, id, transacao.Valor, transacao.Tipo, transacao.GetDescricao(),
+	)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	// }()
 
 	return c.JSON(conta)
 }
@@ -149,23 +148,16 @@ type UltimaTransacao struct {
 // GET extrato
 func ExtratoConta(c *fiber.Ctx) error {
 	ctx := context.Background()
-	conn, err := DB.Conn(ctx)
-	if err != nil {
-
-		return c.Status(500).JSON(fiber.Map{
-			"message": err.Error(),
-		})
-	}
-
 	id := c.Params("id")
 	response := Response{}
 
-	rows, err := conn.QueryContext(ctx, queryGetExtrato, id)
+	rows, err := DB.QueryContext(ctx, queryGetExtrato, id)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"message": err.Error(),
 		})
 	}
+	defer rows.Close()
 	var ultimasTransacoes = make([]UltimaTransacao, 10)
 	index := 0
 	for rows.Next() {
