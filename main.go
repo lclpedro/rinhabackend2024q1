@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -36,6 +37,11 @@ func initDB() {
 	if err != nil {
 		panic(err)
 	}
+	db.SetMaxOpenConns(1_000)
+	db.SetMaxIdleConns(1_000)
+	db.SetConnMaxIdleTime(2 * time.Minute)
+	db.SetConnMaxLifetime(30 * time.Minute)
+
 	DB = db
 }
 
@@ -76,17 +82,13 @@ const (
 
 func InserirTransacao(c *fiber.Ctx) error {
 	ctx := context.Background()
-	conn, err := DB.Conn(ctx)
-	if err != nil {
-		return c.Status(500).SendString(err.Error())
-	}
 	id := c.Params("id")
 	bodyRequest := c.Body()
 	transacao := Extrato{}
 	sonic.Unmarshal(bodyRequest, &transacao)
 
 	conta := Conta{}
-	tx, err := conn.BeginTx(ctx, nil)
+	tx, err := DB.BeginTx(ctx, nil)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
@@ -100,6 +102,7 @@ func InserirTransacao(c *fiber.Ctx) error {
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
+		fmt.Printf("\nConta %s não existe\n", id)
 		return c.Status(404).SendString(`{"message": "Conta não encontrada"}`)
 	}
 	if err != nil {
@@ -107,17 +110,27 @@ func InserirTransacao(c *fiber.Ctx) error {
 		return c.Status(500).SendString(`{"message": "Erro ao atualizar saldo da conta"}`)
 	}
 
-	if int64(math.Abs(float64(conta.Saldo))) > conta.Limite {
+	if transacao.Tipo == "d" && int64(math.Abs(float64(conta.Saldo))) > conta.Limite {
+		fmt.Println("Limite Conta Excedido")
+		fmt.Println("Conta:", id)
+		fmt.Println("Saldo:", conta.Saldo)
+		fmt.Println("Limite:", conta.Limite)
+
+		fmt.Println("Transação")
+		fmt.Println("Valor:", transacao.Valor)
+		fmt.Println("Tipo:", transacao.Tipo)
+
 		return c.Status(422).SendString(`{"message": "Limite de conta excedido"}`)
 	}
 
 	if err := tx.Commit(); err != nil {
+		fmt.Println(err.Error())
 		return c.Status(500).SendString(err.Error())
 	}
 
 	// TODO: testar benchmark com e sem goroutine
 	go func() {
-		_, err = conn.ExecContext(
+		_, err = DB.ExecContext(
 			ctx, queryInserirTransacao, id, transacao.Valor, transacao.Tipo, transacao.GetDescricao(),
 		)
 		if err != nil {
@@ -149,23 +162,23 @@ type UltimaTransacao struct {
 // GET extrato
 func ExtratoConta(c *fiber.Ctx) error {
 	ctx := context.Background()
-	conn, err := DB.Conn(ctx)
-	if err != nil {
-
-		return c.Status(500).JSON(fiber.Map{
-			"message": err.Error(),
-		})
-	}
-
 	id := c.Params("id")
 	response := Response{}
 
-	rows, err := conn.QueryContext(ctx, queryGetExtrato, id)
+	rows, err := DB.QueryContext(ctx, queryGetExtrato, id)
 	if err != nil {
+		fmt.Println(err.Error())
 		return c.Status(500).JSON(fiber.Map{
 			"message": err.Error(),
 		})
 	}
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			fmt.Println(err.Error())
+		}
+	}()
+
 	var ultimasTransacoes = make([]UltimaTransacao, 10)
 	index := 0
 	for rows.Next() {
@@ -180,6 +193,7 @@ func ExtratoConta(c *fiber.Ctx) error {
 		)
 
 		if err != nil {
+			fmt.Println(err.Error())
 			return c.Status(500).JSON(fiber.Map{
 				"message": err.Error(),
 			})

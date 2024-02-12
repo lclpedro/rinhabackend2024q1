@@ -9,13 +9,14 @@ services:
       - DB_HOSTNAME=db
     networks:
       - fsociety
+    restart: always
     depends_on:
       - db
     deploy:
       resources:
         limits:
-          cpus: "0.17"
-          memory: "10MB"
+          cpus: "0.4"
+          memory: "130MB"
 
   api02:
     <<: *api 
@@ -35,13 +36,14 @@ services:
         - api02
       ports:
         - "9999:9999"
+      restart: always
       networks:
         - fsociety
       deploy:
         resources:
           limits:
-            cpus: "0.17"
-            memory: "10MB"
+            cpus: "0.1"
+            memory: "20MB"
 
   db:
     image: postgres:12
@@ -56,11 +58,12 @@ services:
     restart: always
     networks:
       - fsociety
+    command: ["postgres", "-c", "max_connections=1000", "-c", "shared_buffers=500MB"]
     deploy:
       resources:
         limits:
-          cpus: "0.13"
-          memory: "140MB"
+          cpus: "1"
+          memory: "400MB"
 
 networks:
   fsociety:
