@@ -21,7 +21,7 @@ func main() {
 	app := fiber.New()
 	app.Post("/clientes/:id/transacoes", InserirTransacao)
 	app.Get("/clientes/:id/extrato", ExtratoConta)
-	app.Listen(":9999")
+	app.Listen(":3000")
 }
 
 func initDB() {
