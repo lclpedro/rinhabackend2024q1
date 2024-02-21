@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"time"
 
@@ -22,7 +21,7 @@ func main() {
 	app := fiber.New()
 	app.Post("/clientes/:id/transacoes", InserirTransacao)
 	app.Get("/clientes/:id/extrato", ExtratoConta)
-	app.Listen(":3000")
+	app.Listen(":9999")
 }
 
 func initDB() {
@@ -80,12 +79,34 @@ const (
 	queryAtualizarSaldo   = "UPDATE conta SET saldo = %s $1 WHERE id = $2 RETURNING saldo, limite"
 )
 
+func transacaoValida(extrato Extrato) bool {
+	fmt.Println(extrato)
+	if extrato.Tipo != "c" && extrato.Tipo != "d" {
+		fmt.Println("Tipo inválido")
+		return false
+	}
+	if extrato.Valor <= 0 {
+		fmt.Println("Valor inválido")
+		return false
+	}
+	if len(extrato.Descricao) == 0 || len(extrato.Descricao) > 10 {
+		fmt.Println("Descrição inválida")
+		return false
+	}
+
+	return true
+}
+
 func InserirTransacao(c *fiber.Ctx) error {
 	ctx := context.Background()
 	id := c.Params("id")
 	bodyRequest := c.Body()
 	transacao := Extrato{}
 	sonic.Unmarshal(bodyRequest, &transacao)
+
+	if !transacaoValida(transacao) {
+		return c.Status(422).SendString(`{"message": "Transação inválida"}`)
+	}
 
 	conta := Conta{}
 	tx, err := DB.BeginTx(ctx, nil)
@@ -110,16 +131,7 @@ func InserirTransacao(c *fiber.Ctx) error {
 		return c.Status(500).SendString(`{"message": "Erro ao atualizar saldo da conta"}`)
 	}
 
-	if transacao.Tipo == "d" && int64(math.Abs(float64(conta.Saldo))) > conta.Limite {
-		fmt.Println("Limite Conta Excedido")
-		fmt.Println("Conta:", id)
-		fmt.Println("Saldo:", conta.Saldo)
-		fmt.Println("Limite:", conta.Limite)
-
-		fmt.Println("Transação")
-		fmt.Println("Valor:", transacao.Valor)
-		fmt.Println("Tipo:", transacao.Tipo)
-
+	if transacao.Tipo == "d" && conta.Saldo > -conta.Limite {
 		return c.Status(422).SendString(`{"message": "Limite de conta excedido"}`)
 	}
 
